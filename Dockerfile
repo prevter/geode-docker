@@ -69,7 +69,7 @@ RUN set -eux; \
 # ===============================
 FROM geode-sdk-base AS geode-sdk-windows
 
-ARG LLVM_VERSION=21
+ARG LLVM_VERSION=20
 
 RUN set -eux; \
     geode sdk install-linux
