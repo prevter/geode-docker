@@ -1,0 +1,94 @@
+name: Build Docker Images
+
+on:
+  push:
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/build-images.yml'
+  workflow_dispatch:
+    inputs:
+        geode_version:
+          description: "Geode SDK version (latest, nightly, or specific tag)"
+          required: true
+          default: "latest"
+
+jobs:
+  build:
+    strategy:
+      matrix: 
+        target:
+          - windows
+          - macos
+          - android
+          # TODO: add iOS support
+          # - ios
+
+    name: Build image for ${{ matrix.target }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve Geode SDK version
+        id: geode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.geode_version }}"
+          else
+            VERSION="latest"
+          fi
+
+          if [ "${{ github.event_name }}" = "push" ] || [ "$VERSION" = "latest" ]; then
+            UPDATE_LATEST=true
+          else
+            UPDATE_LATEST=false
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "update_latest=$UPDATE_LATEST" >> $GITHUB_OUTPUT
+
+      - name: Compute Docker tags
+        id: tags
+        run: |
+          TAGS=""
+
+          if [ "${{ steps.geode.outputs.update_latest }}" = "true" ]; then
+            TAGS="$TAGS prevter/geode-sdk:${{ matrix.target }}"
+            TAGS="$TAGS ghcr.io/prevter/geode-sdk:${{ matrix.target }}"
+          fi
+
+          TAGS="$TAGS prevter/geode-sdk:${{ matrix.target }}-${{ steps.geode.outputs.version }}"
+          TAGS="$TAGS ghcr.io/prevter/geode-sdk:${{ matrix.target }}-${{ steps.geode.outputs.version }}"
+
+          echo "tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$TAGS" | tr ' ' '\n' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          build-args: |
+            GEODE_SDK_VERSION=${{ steps.geode.outputs.version }}
+          context: .
+          target: geode-sdk-${{ matrix.target }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
