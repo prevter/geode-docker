@@ -14,6 +14,9 @@ on:
 
 jobs:
   build:
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix: 
         target:
