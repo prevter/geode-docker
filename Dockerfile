@@ -115,8 +115,8 @@ FROM geode-sdk-base AS geode-sdk-macos
 
 COPY --from=osxcross /osxcross /osxcross
 
-ENV PATH="/osxcross/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/osxcross/lib:${LD_LIBRARY_PATH}"
+ENV PATH="/osxcross/bin:${PATH}" \
+    LD_LIBRARY_PATH="/osxcross/lib:${LD_LIBRARY_PATH}"
 
 RUN set -eux; \
     apt-get update; \
@@ -124,7 +124,35 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
-    echo 'set(CMAKE_OSX_SYSROOT ${OSXCROSS_SDK})' >> /osxcross/toolchain.cmake
+    OSXCROSS_TARGET=$(ls /osxcross/bin/*-apple-darwin*-clang | head -1 | xargs basename | sed 's/-clang$//'); \
+    SDK_PATH=$(ls -d /osxcross/SDK/*.sdk | head -1); \
+    cat > /osxcross/macos-toolchain.cmake <<EOF
+set(CMAKE_SYSTEM_NAME Darwin)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
+endif()
+set(CMAKE_OSX_SYSROOT ${SDK_PATH})
+set(CMAKE_C_COMPILER /osxcross/bin/${OSXCROSS_TARGET}-clang)
+set(CMAKE_CXX_COMPILER /osxcross/bin/${OSXCROSS_TARGET}-clang++)
+set(CMAKE_AR /osxcross/bin/${OSXCROSS_TARGET}-ar)
+set(CMAKE_RANLIB /osxcross/bin/${OSXCROSS_TARGET}-ranlib)
+set(CMAKE_FIND_ROOT_PATH /osxcross)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+EOF
+
+RUN set -eux; \
+    OSXCROSS_TARGET=$(ls /osxcross/bin/*-apple-darwin*-clang | head -1 | xargs basename | sed 's/-clang$//'); \
+    echo "export CC=/osxcross/bin/${OSXCROSS_TARGET}-clang" >> /etc/profile.d/osxcross.sh; \
+    echo "export CXX=/osxcross/bin/${OSXCROSS_TARGET}-clang++" >> /etc/profile.d/osxcross.sh; \
+    echo "export CMAKE_TOOLCHAIN_FILE=/osxcross/macos-toolchain.cmake" >> /etc/profile.d/osxcross.sh
+
+ENV CC="/osxcross/bin/x86_64-apple-darwin23-clang" \
+    CXX="/osxcross/bin/x86_64-apple-darwin23-clang++" \
+    CMAKE_TOOLCHAIN_FILE="/osxcross/macos-toolchain.cmake"
 
 RUN set -eux; \
     CLI_PROFILE="/root/.config/geode"; \
