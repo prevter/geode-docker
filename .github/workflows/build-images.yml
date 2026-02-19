@@ -23,8 +23,7 @@ jobs:
           - windows
           - macos
           - android
-          # TODO: add iOS support
-          # - ios
+          - ios
 
     name: Build image for ${{ matrix.target }}
     runs-on: ubuntu-latest
