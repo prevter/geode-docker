@@ -10,7 +10,6 @@ FROM ubuntu:${UBUNTU_VERSION} AS geode-sdk-base
 # ===============================
 ENV DEBIAN_FRONTEND=noninteractive \
     GEODE_SDK=/opt/geode \
-    CPM_SOURCE_CACHE=/opt/cpm-cache \
     PATH=/opt/geode-cli:$PATH
 
 # ===============================
