@@ -21,7 +21,7 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates curl nodejs git unzip xz-utils \
-        build-essential cmake pkg-config ninja-build; \
+        build-essential cmake pkg-config ninja-build jq; \
     rm -rf /var/lib/apt/lists/*
 
 # ===============================
