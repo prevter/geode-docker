@@ -1,9 +1,12 @@
 # syntax=docker/dockerfile:1.7
-ARG UBUNTU_VERSION=24.04
+ARG DEBIAN_VERSION=bookworm-slim
 ARG OSXCROSS_VERSION=latest
+ARG LLVM_VERSION=22
 
 FROM crazymax/osxcross:${OSXCROSS_VERSION}-ubuntu AS osxcross
-FROM ubuntu:${UBUNTU_VERSION} AS geode-sdk-base
+FROM debian:${DEBIAN_VERSION} AS geode-sdk-base
+
+ARG LLVM_VERSION
 
 # ===============================
 # Common environment setup
@@ -20,9 +23,25 @@ RUN set -eux; \
     curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        ca-certificates curl nodejs git unzip xz-utils \
+        ca-certificates curl gpg nodejs git unzip xz-utils \
         build-essential cmake pkg-config ninja-build; \
     rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    install -d /etc/apt/keyrings; \
+    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /etc/apt/keyrings/llvm.gpg; \
+    echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-22 main" > /etc/apt/sources.list.d/llvm.list
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        clang-${LLVM_VERSION} clang-tools-${LLVM_VERSION} lld-${LLVM_VERSION} \
+        llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN for tool in clang clang++ lld lld-link llvm-ar llvm-ranlib llvm-nm llvm-rc llvm-mt; do \
+    ln -sf /usr/bin/${tool}-${LLVM_VERSION} /usr/bin/${tool}; \
+    done
 
 # ===============================
 # Install Geode CLI
@@ -68,20 +87,8 @@ RUN set -eux; \
 # ===============================
 FROM geode-sdk-base AS geode-sdk-windows
 
-ARG LLVM_VERSION=20
-
 RUN set -eux; \
     geode sdk install-linux
-
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        clang-${LLVM_VERSION} clang-tools-${LLVM_VERSION} lld-${LLVM_VERSION} llvm-${LLVM_VERSION}; \
-    rm -rf /var/lib/apt/lists/*
-
-RUN for tool in clang clang++ lld lld-link llvm-ar llvm-ranlib llvm-nm llvm-rc llvm-mt; do \
-    ln -sf /usr/bin/${tool}-${LLVM_VERSION} /usr/bin/${tool}; \
-    done
 
 RUN set -eux; \
     geode sdk install-binaries -p windows
@@ -116,11 +123,6 @@ COPY --from=osxcross /osxcross /osxcross
 
 ENV PATH="/osxcross/bin:${PATH}" \
     LD_LIBRARY_PATH="/osxcross/lib:${LD_LIBRARY_PATH}"
-
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends clang; \
-    rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
     OSXCROSS_TARGET=$(ls /osxcross/bin/*-apple-darwin*-clang | head -1 | xargs basename | sed 's/-clang$//'); \
@@ -173,7 +175,7 @@ ENV OSXCROSS=/osxcross \
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        clang llvm-dev libxml2-dev uuid-dev libssl-dev \
+        libxml2-dev uuid-dev libssl-dev \
         bash patch make xz-utils bzip2 cpio zlib1g-dev; \
     rm -rf /var/lib/apt/lists/*
 
