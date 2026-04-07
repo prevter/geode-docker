@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.7
-ARG DEBIAN_VERSION=bookworm-slim
+ARG UBUNTU_VERSION=24.04
 ARG OSXCROSS_VERSION=latest
-ARG LLVM_VERSION=22
+ARG LLVM_VERSION=21
 
 FROM crazymax/osxcross:${OSXCROSS_VERSION}-ubuntu AS osxcross
-FROM debian:${DEBIAN_VERSION} AS geode-sdk-base
+FROM ubuntu:${UBUNTU_VERSION} AS geode-sdk-base
 
 ARG LLVM_VERSION
 
@@ -30,7 +30,7 @@ RUN set -eux; \
 RUN set -eux; \
     install -d /etc/apt/keyrings; \
     curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /etc/apt/keyrings/llvm.gpg; \
-    echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-22 main" > /etc/apt/sources.list.d/llvm.list
+    echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" > /etc/apt/sources.list.d/llvm.list
 
 RUN set -eux; \
     apt-get update; \
