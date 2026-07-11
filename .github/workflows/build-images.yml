@@ -13,7 +13,33 @@ on:
           default: "latest"
 
 jobs:
+  version:
+    name: Resolve Geode SDK Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.geode.outputs.version }}
+      update_latest: ${{ steps.geode.outputs.update_latest }}
+    steps:
+      - name: Resolve Geode SDK version
+        id: geode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.geode_version }}"
+          else
+            VERSION="latest"
+          fi
+ 
+          if [ "${{ github.event_name }}" = "push" ] || [ "$VERSION" = "latest" ]; then
+            UPDATE_LATEST=true
+          else
+            UPDATE_LATEST=false
+          fi
+ 
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "update_latest=$UPDATE_LATEST" >> $GITHUB_OUTPUT
+
   build:
+    needs: version
     permissions:
       contents: read
       packages: write
@@ -24,9 +50,12 @@ jobs:
           - macos
           - android
           - ios
+        arch:
+          - x86_64
+          - arm64
 
-    name: Build image for ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.target }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
 
     steps:
       - name: Checkout repository
@@ -48,49 +77,93 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve Geode SDK version
-        id: geode
+      - name: Build and push image by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          build-args: |
+            GEODE_SDK_VERSION=${{ needs.version.outputs.version }}
+          context: .
+          target: geode-sdk-${{ matrix.target }}
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=prevter/geode-sdk,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.target }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}-${{ matrix.arch }}
+
+      - name: Export digest
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.geode_version }}"
-          else
-            VERSION="latest"
-          fi
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
 
-          if [ "${{ github.event_name }}" = "push" ] || [ "$VERSION" = "latest" ]; then
-            UPDATE_LATEST=true
-          else
-            UPDATE_LATEST=false
-          fi
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.target }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          retention-days: 1
 
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "update_latest=$UPDATE_LATEST" >> $GITHUB_OUTPUT
+  merge:
+    needs: [version, build]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        target:
+          - windows
+          - macos
+          - android
+          - ios
 
-      - name: Compute Docker tags
+    name: Merge manifest for ${{ matrix.target }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.target }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
         id: tags
         run: |
           TAGS=""
 
-          if [ "${{ steps.geode.outputs.update_latest }}" = "true" ]; then
-            TAGS="$TAGS prevter/geode-sdk:${{ matrix.target }}"
-            TAGS="$TAGS ghcr.io/prevter/geode-sdk:${{ matrix.target }}"
+          if [ "${{ needs.version.outputs.update_latest }}" = "true" ]; then
+            TAGS="$TAGS -t prevter/geode-sdk:${{ matrix.target }}"
+            TAGS="$TAGS -t ghcr.io/prevter/geode-sdk:${{ matrix.target }}"
           fi
 
-          TAGS="$TAGS prevter/geode-sdk:${{ matrix.target }}-${{ steps.geode.outputs.version }}"
-          TAGS="$TAGS ghcr.io/prevter/geode-sdk:${{ matrix.target }}-${{ steps.geode.outputs.version }}"
+          TAGS="$TAGS -t prevter/geode-sdk:${{ matrix.target }}-${{ needs.version.outputs.version }}"
+          TAGS="$TAGS -t ghcr.io/prevter/geode-sdk:${{ matrix.target }}-${{ needs.version.outputs.version }}"
+ 
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
 
-          echo "tags<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAGS" | tr ' ' '\n' >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Create and push manifest list
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create ${{ steps.tags.outputs.tags }} \
+            $(printf 'prevter/geode-sdk@sha256:%s ' *)
 
-      - name: Build and push image
-        uses: docker/build-push-action@v7
-        with:
-          build-args: |
-            GEODE_SDK_VERSION=${{ steps.geode.outputs.version }}
-          context: .
-          target: geode-sdk-${{ matrix.target }}
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Inspect manifest
+        run: |
+          docker buildx imagetools inspect prevter/geode-sdk:${{ matrix.target }}-${{ needs.version.outputs.version }}

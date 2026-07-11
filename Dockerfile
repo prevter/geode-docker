@@ -47,13 +47,19 @@ RUN for tool in clang clang++ lld lld-link llvm-ar llvm-ranlib llvm-nm llvm-rc l
 # Install Geode CLI
 # ===============================
 ARG GEODE_CLI_VERSION=latest
+ARG TARGETARCH
 RUN set -eux; \
     if [ "${GEODE_CLI_VERSION}" = "latest" ]; then \
         GEODE_CLI_VERSION="$(curl -fsSL https://api.github.com/repos/geode-sdk/cli/releases/latest \
             | grep -Po '"tag_name":\s*"\Kv[^"]+')"; \
     fi; \
     echo "Installing Geode CLI ${GEODE_CLI_VERSION}"; \
-    curl -fsSL "https://github.com/geode-sdk/cli/releases/download/${GEODE_CLI_VERSION}/geode-cli-${GEODE_CLI_VERSION}-linux.zip" -o /tmp/geode-cli.zip; \
+    if [ "${TARGETARCH}" = "arm64" ]; then \
+        CLI_SUFFIX="linux-arm"; \
+    else \
+        CLI_SUFFIX="linux"; \
+    fi; \
+    curl -fsSL "https://github.com/geode-sdk/cli/releases/download/${GEODE_CLI_VERSION}/geode-cli-${GEODE_CLI_VERSION}-${CLI_SUFFIX}.zip" -o /tmp/geode-cli.zip; \
     unzip -q /tmp/geode-cli.zip -d /opt/geode-cli; \
     rm /tmp/geode-cli.zip; \
     chmod +x /opt/geode-cli/geode; \
@@ -102,11 +108,26 @@ FROM geode-sdk-base AS geode-sdk-android
 ARG ANDROID_NDK_VERSION=r29
 ENV ANDROID_NDK_ROOT=/opt/android-ndk
 RUN set -eux; \
-    echo "Installing Android NDK ${ANDROID_NDK_VERSION}"; \
-    curl -fsSL "https://dl.google.com/android/repository/android-ndk-${ANDROID_NDK_VERSION}-linux.zip" -o /tmp/android-ndk.zip; \
-    unzip -q /tmp/android-ndk.zip -d /opt; \
-    rm /tmp/android-ndk.zip; \
-    mv "/opt/android-ndk-${ANDROID_NDK_VERSION}" "${ANDROID_NDK_ROOT}"; \
+    if [ "${TARGETARCH}" = "arm64" ]; then \
+        echo "Installing Android NDK for aarch64"; \
+        curl -fsSL "https://github.com/SnowNF/ndk-aarch64-linux/releases/download/0.0.2/android-ndk-r29-linux-aarch64.tar.gz" -o /tmp/android-ndk.tar.gz; \
+        mkdir -p "${ANDROID_NDK_ROOT}"; \
+        tar -xzf /tmp/android-ndk.tar.gz -C "${ANDROID_NDK_ROOT}" --strip-components=1; \
+        rm /tmp/android-ndk.tar.gz; \
+        apt-get update; \
+        apt-get install -y --no-install-recommends libxml2; \
+        rm -rf /var/lib/apt/lists/*; \
+        SYS_LIBXML=$(ls /usr/lib/aarch64-linux-gnu/libxml2.so.* | head -1); \
+        if [ -n "$SYS_LIBXML" ]; then \
+            ln -sf "$SYS_LIBXML" /usr/lib/aarch64-linux-gnu/libxml2.so.16; \
+        fi; \
+    else \
+        echo "Installing Android NDK ${ANDROID_NDK_VERSION}"; \
+        curl -fsSL "https://dl.google.com/android/repository/android-ndk-${ANDROID_NDK_VERSION}-linux.zip" -o /tmp/android-ndk.zip; \
+        unzip -q /tmp/android-ndk.zip -d /opt; \
+        rm /tmp/android-ndk.zip; \
+        mv "/opt/android-ndk-${ANDROID_NDK_VERSION}" "${ANDROID_NDK_ROOT}"; \
+    fi; \
     echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}" >> /etc/environment
 
 RUN set -eux; \
