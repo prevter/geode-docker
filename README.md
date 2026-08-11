@@ -8,12 +8,12 @@ that runs on Linux host and can build mods for Windows, Android, macOS and iOS.
 
 ## Available Tags
 
-| Platform     | Tags                                                            | Image size |
-|--------------|-----------------------------------------------------------------|------------|
-| Windows      | `windows`, `windows-latest`, `windows-nightly`, `windows-5.8.1` | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/prevter/geode-sdk/windows?label=%20) |
-| Android32/64 | `android`, `android-latest`, `android-nightly`, `android-5.8.1` | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/prevter/geode-sdk/android?label=%20) |
-| macOS        | `macos`, `macos-latest`, `macos-nightly`, `macos-5.8.1`         | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/prevter/geode-sdk/macos?label=%20) |
-| iOS          | `ios`, `ios-latest`, `ios-nightly`, `ios-5.8.1`                 | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/prevter/geode-sdk/ios?label=%20) |
+| Platform     | Tags                                         | Image size |
+|--------------|----------------------------------------------|------------|
+| Windows      | `windows`, `windows-latest`, `windows-5.9.0` | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/prevter/geode-sdk/windows?label=%20) |
+| Android32/64 | `android`, `android-latest`, `android-5.9.0` | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/prevter/geode-sdk/android?label=%20) |
+| macOS        | `macos`, `macos-latest`, `macos-5.9.0`       | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/prevter/geode-sdk/macos?label=%20) |
+| iOS          | `ios`, `ios-latest`, `ios-5.9.0`             | ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/prevter/geode-sdk/ios?label=%20) |
 
 > [!NOTE]
 > The `-latest` tags are an alias for non-tagged builds. `windows` and `windows-latest` are identical.
