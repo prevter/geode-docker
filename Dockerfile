@@ -52,9 +52,15 @@ ARG GEODE_CLI_VERSION=latest
 ARG GEODE_SDK_VERSION=latest
 ARG TARGETARCH
 
-RUN set -eux; \
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    set -eux; \
+    GITHUB_TOKEN=$(cat /run/secrets/GITHUB_TOKEN 2>/dev/null || true); \
+    AUTH_HEADER=""; \
+    if [ -n "$GITHUB_TOKEN" ]; then \
+        AUTH_HEADER="Authorization: Bearer $GITHUB_TOKEN"; \
+    fi; \
     if [ "${GEODE_CLI_VERSION}" = "latest" ]; then \
-        GEODE_CLI_VERSION="$(curl -fsSL https://api.github.com/repos/geode-sdk/cli/releases/latest \
+        GEODE_CLI_VERSION="$(curl -fsSL ${AUTH_HEADER:+-H "$AUTH_HEADER"} https://api.github.com/repos/geode-sdk/cli/releases/latest \
             | grep -Po '"tag_name":\s*"\Kv[^"]+')"; \
     fi; \
     echo "Installing Geode CLI ${GEODE_CLI_VERSION}"; \

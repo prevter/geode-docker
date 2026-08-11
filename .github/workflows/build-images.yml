@@ -85,6 +85,8 @@ jobs:
         with:
           build-args: |
             GEODE_SDK_VERSION=${{ needs.version.outputs.version }}
+          secrets: |
+            "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}"
           context: .
           target: geode-sdk-${{ matrix.target }}
           platforms: linux/${{ matrix.arch }}
