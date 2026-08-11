@@ -119,13 +119,6 @@ RUN set -eux; \
         mkdir -p "${ANDROID_NDK_ROOT}"; \
         tar -xzf /tmp/android-ndk.tar.gz -C "${ANDROID_NDK_ROOT}" --strip-components=1; \
         rm /tmp/android-ndk.tar.gz; \
-        apt-get update; \
-        apt-get install -y --no-install-recommends libxml2; \
-        rm -rf /var/lib/apt/lists/*; \
-        SYS_LIBXML=$(ls /usr/lib/aarch64-linux-gnu/libxml2.so.* | head -1); \
-        if [ -n "$SYS_LIBXML" ]; then \
-            ln -sf "$SYS_LIBXML" /usr/lib/aarch64-linux-gnu/libxml2.so.16; \
-        fi; \
     else \
         echo "Installing Android NDK ${ANDROID_NDK_VERSION}"; \
         curl -fsSL "https://dl.google.com/android/repository/android-ndk-${ANDROID_NDK_VERSION}-linux.zip" -o /tmp/android-ndk.zip; \
