@@ -35,10 +35,10 @@ This should drop you into a bash shell with configured toolchain. To compile you
 
 ```bash
 # For Windows
-geode build -p windows --target Release -- -G Ninja
+geode build -p windows --config Release -- -G Ninja
 
 # For Android (use android64 or android32)
-geode build -p android64 --target Release -- -G Ninja
+geode build -p android64 --config Release -- -G Ninja
 ```
 
 ### macOS & iOS
