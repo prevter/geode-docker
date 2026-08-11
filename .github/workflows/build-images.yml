@@ -18,25 +18,27 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.geode.outputs.version }}
-      update_latest: ${{ steps.geode.outputs.update_latest }}
+      is_latest: ${{ steps.geode.outputs.is_latest }}
     steps:
       - name: Resolve Geode SDK version
         id: geode
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.geode_version }}"
+            INPUT_VERSION="${{ inputs.geode_version }}"
           else
-            VERSION="latest"
+            INPUT_VERSION="latest"
           fi
- 
-          if [ "${{ github.event_name }}" = "push" ] || [ "$VERSION" = "latest" ]; then
-            UPDATE_LATEST=true
+
+          if [ "$INPUT_VERSION" = "latest" ]; then
+            RESOLVED_VERSION=$(curl -s https://api.github.com/repos/geode-sdk/geode/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+            IS_LATEST=true
           else
-            UPDATE_LATEST=false
+            RESOLVED_VERSION="$INPUT_VERSION"
+            IS_LATEST=false
           fi
- 
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "update_latest=$UPDATE_LATEST" >> $GITHUB_OUTPUT
+
+          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+          echo "is_latest=$IS_LATEST" >> $GITHUB_OUTPUT
 
   build:
     needs: version
@@ -44,7 +46,7 @@ jobs:
       contents: read
       packages: write
     strategy:
-      matrix: 
+      matrix:
         target:
           - windows
           - macos
@@ -147,15 +149,19 @@ jobs:
         id: tags
         run: |
           TAGS=""
+          TARGET="${{ matrix.target }}"
+          VERSION="${{ needs.version.outputs.version }}"
 
-          if [ "${{ needs.version.outputs.update_latest }}" = "true" ]; then
-            TAGS="$TAGS -t prevter/geode-sdk:${{ matrix.target }}"
-            TAGS="$TAGS -t ghcr.io/prevter/geode-sdk:${{ matrix.target }}"
+          TAGS="$TAGS -t prevter/geode-sdk:${TARGET}-${VERSION}"
+          TAGS="$TAGS -t ghcr.io/prevter/geode-sdk:${TARGET}-${VERSION}"
+
+          if [ "${{ needs.version.outputs.is_latest }}" = "true" ]; then
+            TAGS="$TAGS -t prevter/geode-sdk:${TARGET}"
+            TAGS="$TAGS -t ghcr.io/prevter/geode-sdk:${TARGET}"
+            TAGS="$TAGS -t prevter/geode-sdk:${TARGET}-latest"
+            TAGS="$TAGS -t ghcr.io/prevter/geode-sdk:${TARGET}-latest"
           fi
 
-          TAGS="$TAGS -t prevter/geode-sdk:${{ matrix.target }}-${{ needs.version.outputs.version }}"
-          TAGS="$TAGS -t ghcr.io/prevter/geode-sdk:${{ matrix.target }}-${{ needs.version.outputs.version }}"
- 
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
 
       - name: Create and push manifest list

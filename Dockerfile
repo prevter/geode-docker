@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.7
-ARG UBUNTU_VERSION=24.04
+ARG UBUNTU_VERSION=26.04
 ARG OSXCROSS_VERSION=latest
-ARG LLVM_VERSION=21
+ARG LLVM_VERSION=22
 
 FROM crazymax/osxcross:${OSXCROSS_VERSION}-ubuntu AS osxcross
-FROM ubuntu:${UBUNTU_VERSION} AS geode-sdk-base
+FROM ubuntu:${UBUNTU_VERSION} AS toolchain-base
 
 ARG LLVM_VERSION
 
@@ -30,7 +30,7 @@ RUN set -eux; \
 RUN set -eux; \
     install -d /etc/apt/keyrings; \
     curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /etc/apt/keyrings/llvm.gpg; \
-    echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" > /etc/apt/sources.list.d/llvm.list
+    echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/resolute/ llvm-toolchain-resolute-${LLVM_VERSION} main" > /etc/apt/sources.list.d/llvm.list
 
 RUN set -eux; \
     apt-get update; \
@@ -46,8 +46,12 @@ RUN for tool in clang clang++ lld lld-link llvm-ar llvm-ranlib llvm-nm llvm-rc l
 # ===============================
 # Install Geode CLI
 # ===============================
+FROM toolchain-base AS geode-sdk-base
+
 ARG GEODE_CLI_VERSION=latest
+ARG GEODE_SDK_VERSION=latest
 ARG TARGETARCH
+
 RUN set -eux; \
     if [ "${GEODE_CLI_VERSION}" = "latest" ]; then \
         GEODE_CLI_VERSION="$(curl -fsSL https://api.github.com/repos/geode-sdk/cli/releases/latest \
@@ -76,7 +80,6 @@ RUN set -eux; \
 # ===============================
 # Install Geode SDK
 # ===============================
-ARG GEODE_SDK_VERSION=latest
 RUN set -eux; \
     echo "Installing Geode SDK ${GEODE_SDK_VERSION}"; \
     geode sdk install "${GEODE_SDK}"; \
@@ -103,10 +106,12 @@ RUN set -eux; \
 # ===============================
 # Android image (Android NDK + Android binaries)
 # ===============================
-FROM geode-sdk-base AS geode-sdk-android
+FROM toolchain-base AS android-toolchain
 
 ARG ANDROID_NDK_VERSION=r29
+ARG TARGETARCH
 ENV ANDROID_NDK_ROOT=/opt/android-ndk
+
 RUN set -eux; \
     if [ "${TARGETARCH}" = "arm64" ]; then \
         echo "Installing Android NDK for aarch64"; \
@@ -129,6 +134,10 @@ RUN set -eux; \
         mv "/opt/android-ndk-${ANDROID_NDK_VERSION}" "${ANDROID_NDK_ROOT}"; \
     fi; \
     echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}" >> /etc/environment
+
+FROM geode-sdk-base AS geode-sdk-android
+COPY --from=android-toolchain /opt/android-ndk /opt/android-ndk
+ENV ANDROID_NDK_ROOT=/opt/android-ndk
 
 RUN set -eux; \
     geode sdk install-binaries -p android32; \
@@ -187,7 +196,7 @@ RUN set -eux; \
 # ===============================
 # iOS image (osxcross + iPhoneOS SDK)
 # ===============================
-FROM geode-sdk-base AS geode-sdk-ios
+FROM toolchain-base AS ios-toolchain
 
 ENV OSXCROSS=/osxcross \
     THEOS=/opt/theos \
@@ -205,7 +214,16 @@ COPY ios-sdk.tar.xz /tmp/ios-sdk.tar.xz
 RUN set -eux; \
     git clone --depth 1 https://github.com/tpoechtrager/osxcross "${OSXCROSS}"; \
     cd "${OSXCROSS}"; \
-    sed -i 's/"-mmacos-version-min"/"-miphoneos-version-min"/g; /"-mmacosx-version-min"/d' wrapper/main.cpp; \
+    sed -i 's/"-mmacosx-version-min"/"-miphoneos-version-min"/g' wrapper/main.cpp; \
+    sed -i 's/"-mmacos-version-min"/"-miphoneos-version-min"/g' wrapper/main.cpp; \
+    sed -i '/if (!detectTarget(argc, argv, target)) {/i \
+  for (auto it = target.fargs.begin(); it != target.fargs.end();) {\
+    if (it->find("-mmacosx-version-min") == 0 || it->find("-mmacos-version-min") == 0) {\
+      it = target.fargs.erase(it);\
+    } else {\
+      ++it;\
+    }\
+  }' wrapper/main.cpp; \
     sed -i 's/set(CMAKE_SYSTEM_NAME "Darwin")/set(CMAKE_SYSTEM_NAME "iOS")/g' tools/toolchain.cmake
 
 RUN set -eux; \
@@ -219,7 +237,7 @@ RUN set -eux; \
 
 RUN set -eux; \
     cd "${OSXCROSS}"; \
-    UNATTENDED=yes ./build.sh; \
+    echo "1" | UNATTENDED=yes ./build.sh; \
     rm -rf target/SDK/MacOSX*.sdk; \
     git clone --depth 1 https://github.com/theos/theos "${THEOS}"; \
     tar -xf /tmp/ios-sdk.tar.xz -C "${THEOS}/sdks"; \
@@ -228,6 +246,15 @@ RUN set -eux; \
     ln -sf "${THEOS}/sdks/${SDK_NAME}" "${OSXCROSS}/target/SDK/MacOSX26.1.sdk"; \
     rm /tmp/ios-sdk.tar.xz
 
+FROM geode-sdk-base AS geode-sdk-ios
+
+COPY --from=ios-toolchain /osxcross /osxcross
+COPY --from=ios-toolchain /opt/theos /opt/theos
+
+ENV OSXCROSS=/osxcross \
+    THEOS=/opt/theos \
+    PATH="/osxcross/target/bin:${PATH}"
+
 RUN set -eux; \
     sed -i '/is not an iOS SDK/d; /message(FATAL_ERROR/d' /usr/share/cmake-*/Modules/Platform/iOS-Initialize.cmake; \
     SDK_NAME=$(ls "${THEOS}/sdks" | grep '\.sdk' | head -1); \
@@ -235,12 +262,12 @@ RUN set -eux; \
 set(CMAKE_SYSTEM_NAME iOS)
 set(CMAKE_SYSTEM_PROCESSOR arm64)
 set(CMAKE_OSX_ARCHITECTURES arm64)
-set(CMAKE_OSX_DEPLOYMENT_TARGET 14.0)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "")
 set(CMAKE_OSX_SYSROOT ${THEOS}/sdks/${SDK_NAME})
 set(CMAKE_C_COMPILER ${OSXCROSS}/target/bin/arm64-apple-darwin25.1-clang)
 set(CMAKE_CXX_COMPILER ${OSXCROSS}/target/bin/arm64-apple-darwin25.1-clang++)
-set(CMAKE_C_FLAGS_INIT "-target arm64-apple-ios14.0 -miphoneos-version-min=14.0")
-set(CMAKE_CXX_FLAGS_INIT "-target arm64-apple-ios14.0 -miphoneos-version-min=14.0")
+set(CMAKE_C_FLAGS_INIT "-target arm64-apple-ios14.0 -miphoneos-version-min=14.0 -Wno-overriding-option")
+set(CMAKE_CXX_FLAGS_INIT "-target arm64-apple-ios14.0 -miphoneos-version-min=14.0 -Wno-overriding-option")
 set(CMAKE_C_LINK_FLAGS "-fuse-ld=${OSXCROSS}/target/bin/arm64-apple-darwin25.1-ld")
 set(CMAKE_CXX_LINK_FLAGS "-fuse-ld=${OSXCROSS}/target/bin/arm64-apple-darwin25.1-ld")
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-fuse-ld=${OSXCROSS}/target/bin/arm64-apple-darwin25.1-ld")
