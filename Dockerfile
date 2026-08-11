@@ -154,6 +154,15 @@ ENV PATH="/osxcross/bin:${PATH}" \
     LD_LIBRARY_PATH="/osxcross/lib:${LD_LIBRARY_PATH}"
 
 RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends libxml2-utils; \
+    rm -rf /var/lib/apt/lists/*; \
+    SYS_LIBXML=$(find /usr/lib/ -name "libxml2.so.*" | head -1); \
+    if [ -n "$SYS_LIBXML" ]; then \
+        ln -sf "$SYS_LIBXML" $(dirname "$SYS_LIBXML")/libxml2.so.2; \
+    fi;
+
+RUN set -eux; \
     OSXCROSS_TARGET=$(ls /osxcross/bin/*-apple-darwin*-clang | head -1 | xargs basename | sed 's/-clang$//'); \
     SDK_PATH=$(ls -d /osxcross/SDK/*.sdk | head -1); \
     cat > /osxcross/macos-toolchain.cmake <<EOF
