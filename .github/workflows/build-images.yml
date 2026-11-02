@@ -81,7 +81,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           build-args: |
-            GEODE_CLI_VERSION="v${{ needs.version.outputs.cli_version }}"
+            GEODE_CLI_VERSION=v${{ needs.version.outputs.cli_version }}
           context: .
           target: geode-tools-${{ matrix.target }}
           platforms: linux/${{ matrix.arch }}
