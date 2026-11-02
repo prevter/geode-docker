@@ -32,8 +32,8 @@ jobs:
             INPUT_VERSION="latest"
           fi
 
-          if [ "$INPUT_VERSION" = "latest" ]; then
-            RESOLVED_VERSION=$(curl -s https://api.github.com/repos/geode-sdk/cli/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [ -z "$INPUT_VERSION" ] || [ "$INPUT_VERSION" = "latest" ]; then
+            RESOLVED_VERSION=$(curl -fsSL https://api.github.com/repos/geode-sdk/cli/releases/latest | jq -er '.tag_name' | sed 's/^v//')
             IS_DEFAULT=true
           else
             RESOLVED_VERSION="$INPUT_VERSION"
