@@ -45,6 +45,7 @@ jobs:
 
   build-tools:
     name: Build Tools (${{ matrix.target }} - ${{ matrix.arch }})
+    needs: version
     permissions:
       contents: read
       packages: write
