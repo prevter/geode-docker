@@ -139,16 +139,20 @@ jobs:
       - name: Create and push manifest
         working-directory: /tmp/digests
         run: |
-          REPO="ghcr.io/${{ env.REGISTRY_OWNER }}"
+          REPO="ghcr.io/${{ github.repository_owner }}"
           TARGET="${{ matrix.target }}"
           CLI_VERSION="${{ needs.version.outputs.cli_version }}"
           IS_DEFAULT="${{ needs.version.outputs.is_default }}"
 
-          TAGS="-t ${REPO}/tools:${TARGET}-${CLI_VERSION}"
+          TAGS=(-t "${REPO}/tools:${TARGET}-${CLI_VERSION}")
 
-          if [ "${{ needs.version.outputs.is_default }}" = "true" ]; then
-            TAGS="$TAGS -t ${REPO}/tools:${TARGET}"
+          if [ "$IS_DEFAULT" = "true" ]; then
+            TAGS+=(-t "${REPO}/tools:${TARGET}")
           fi
 
-          docker buildx imagetools create $TAGS \
-            $(printf '${REPO}/tools@sha256:%s ' *)
+          SOURCES=()
+          for digest in *; do
+              SOURCES+=("${REPO}/tools@sha256:${digest}")
+          done
+
+          docker buildx imagetools create "${TAGS[@]}" "${SOURCES[@]}"
